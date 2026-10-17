@@ -1,0 +1,61 @@
+name: packwiz-scan
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Install packwiz
+        run: go install github.com/packwiz/packwiz@170b22d785959dda5876b54b7f16e1b807a57fb6
+      - name: Update mods to latest
+        run: |
+          "$(go env GOPATH)/bin/packwiz" update --all | tee "$RUNNER_TEMP/update.log"
+      - name: Report available updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Packwiz updates available
+        run: |
+          if git diff --quiet -- mods datapacks; then
+            echo "All mods and datapacks are up to date."
+            exit 0
+          fi
+          {
+            echo "Scheduled \`packwiz update --all\` found newer versions for MC $(sed -n 's/^minecraft = "\(.*\)"/\1/p' pack.toml)."
+            echo
+            echo "Changed files:"
+            echo '```'
+            git diff --stat -- mods datapacks
+            echo '```'
+            echo
+            echo "Apply with \`packwiz refresh --build\` after updating, then open a PR."
+            echo
+            echo "<details><summary>Diff</summary>"
+            echo
+            echo '```diff'
+            git diff -- mods datapacks | head -n 500
+            echo '```'
+            echo "</details>"
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$RUNNER_TEMP/body.md"
+          existing=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          fi
