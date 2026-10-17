@@ -2,3 +2,5 @@ README.md
 LICENSE
 .github/
 .gitattributes
+renovate.json
+.remember/
