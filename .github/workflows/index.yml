@@ -1,0 +1,25 @@
+name: index
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  index-up-to-date:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Install packwiz
+        run: go install github.com/packwiz/packwiz@170b22d785959dda5876b54b7f16e1b807a57fb6
+      - name: Check index.toml matches the tree
+        run: |
+          "$(go env GOPATH)/bin/packwiz" refresh --build
+          git diff --exit-code -- index.toml pack.toml
